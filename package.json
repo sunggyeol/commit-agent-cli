@@ -1,6 +1,6 @@
 {
     "name": "commit-agent-cli",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "description": "AI-powered git commit CLI using LangGraph and Claude 4.5",
     "main": "dist/index.js",
     "types": "./dist/index.d.ts",
@@ -9,7 +9,7 @@
         "dist"
     ],
     "bin": {
-        "commit": "./dist/index.js"
+        "commit": "dist/index.js"
     },
     "scripts": {
         "build": "tsup src/index.ts --format esm --dts --clean",

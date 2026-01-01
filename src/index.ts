@@ -157,13 +157,58 @@ async function main() {
             commitMessage = (await generateCommitMessage(diff, preferences)) as string;
         } catch (error: any) {
             s.stop('Generation failed.');
+            
+            // Check if it's an authentication error
+            if (error.message?.includes('401') || 
+                error.message?.includes('authentication_error') || 
+                error.message?.includes('invalid x-api-key') ||
+                error.message?.includes('invalid api key')) {
+                
+                cancel('Invalid API Key detected.');
+                
+                const retryWithNewKey = await confirm({
+                    message: 'Would you like to enter a new API key?',
+                    initialValue: true,
+                });
+
+                if (isCancel(retryWithNewKey) || !retryWithNewKey) {
+                    cancel('Operation cancelled.');
+                    process.exit(0);
+                }
+
+                const newKey = await text({
+                    message: 'Enter your Anthropic API Key (sk-...):',
+                    placeholder: 'sk-ant-api...',
+                    validate: (value) => {
+                        if (!value) return 'API Key is required';
+                        if (!value.startsWith('sk-')) return 'Invalid API Key format (should start with sk-)';
+                    }
+                });
+
+                if (isCancel(newKey)) {
+                    cancel('Operation cancelled.');
+                    process.exit(0);
+                }
+
+                apiKey = newKey as string;
+                process.env.ANTHROPIC_API_KEY = apiKey;
+                await storeKey(apiKey);
+                
+                note('API Key updated. Retrying...', 'Key Updated');
+                continue; // Retry with new key
+            }
+            
+            // For other errors, just show the error and exit
             cancel(`Error: ${error.message}`);
             return;
         }
         s.stop('Message generated.');
 
         // Format and display the commit message with proper wrapping and highlighting
-        const maxWidth = 80;
+        // Use terminal width with padding for box borders and margins
+        const terminalWidth = process.stdout.columns || 80;
+        // Account for clack's note box padding (usually ~10 chars for borders and margins)
+        const maxWidth = Math.max(40, terminalWidth - 12);
         const lines = commitMessage.split('\n');
         const wrappedLines: string[] = [];
 
@@ -171,15 +216,27 @@ async function main() {
             if (line.length <= maxWidth) {
                 wrappedLines.push(line);
             } else {
-                // Wrap long lines
+                // Wrap long lines at word boundaries
                 const words = line.split(' ');
                 let currentLine = '';
                 for (const word of words) {
-                    if ((currentLine + ' ' + word).trim().length <= maxWidth) {
-                        currentLine = currentLine ? currentLine + ' ' + word : word;
+                    const testLine = currentLine ? currentLine + ' ' + word : word;
+                    if (testLine.length <= maxWidth) {
+                        currentLine = testLine;
                     } else {
                         if (currentLine) wrappedLines.push(currentLine);
-                        currentLine = word;
+                        // Handle very long words that don't fit
+                        if (word.length > maxWidth) {
+                            // Split long words
+                            let remaining = word;
+                            while (remaining.length > maxWidth) {
+                                wrappedLines.push(remaining.substring(0, maxWidth));
+                                remaining = remaining.substring(maxWidth);
+                            }
+                            currentLine = remaining;
+                        } else {
+                            currentLine = word;
+                        }
                     }
                 }
                 if (currentLine) wrappedLines.push(currentLine);
