@@ -301,6 +301,131 @@ commit
 - Wait a few minutes and try again
 - Check your usage at https://console.anthropic.com
 
+### Update notifications not showing
+
+**Why it might not show:**
+
+The update notifier only works when:
+1. ✅ The package is published to npm
+2. ✅ A newer version exists on npm registry
+3. ✅ You're using an older version
+4. ✅ At least 1 hour has passed since last check (cached)
+
+**To test update notifications:**
+
+1. First, publish current version to npm:
+   ```bash
+   npm publish
+   ```
+
+2. Then bump version and publish again:
+   ```bash
+   npm version patch
+   npm publish
+   ```
+
+3. Users with the old version will see:
+   ```
+   ╭───────────────────────────────────────────────────────────────────╮
+   │                                                                   │
+   │  New version of commit-cli is available!                         │
+   │                                                                   │
+   │  Current version:  0.1.3                                         │
+   │  Latest version:   0.1.5                                         │
+   │                                                                   │
+   │  You can update it by running:                                   │
+   │  npm install -g commit-agent-cli                                 │
+   │                                                                   │
+   │  If you get an error, try:                                       │
+   │  npm uninstall -g commit-agent-cli && npm install -g commit-agent-cli │
+   │                                                                   │
+   ╰───────────────────────────────────────────────────────────────────╯
+   ```
+
+**Clear notification cache (for testing):**
+```bash
+rm -rf ~/.config/configstore/update-notifier-commit-agent-cli.json
+```
+
+### npm install/update errors
+
+**ENOTEMPTY error when updating:**
+
+```
+npm error ENOTEMPTY: directory not empty
+```
+
+**Why this happens:**
+- You tried to update while the CLI was running
+- npm cannot update a package that's currently in use
+- This is a node/npm limitation, not a bug
+
+**Solution - Wait until CLI finishes, then update:**
+```bash
+# After the CLI completes and exits, run:
+npm install -g commit-agent-cli@latest --force
+```
+
+**If the error persists (package is locked):**
+
+Option 1 - Manual cleanup for nvm users:
+```bash
+# Find your Node version: node -v
+# Replace v22.16.0 with your version
+rm -rf ~/.nvm/versions/node/v22.16.0/lib/node_modules/commit-agent-cli
+npm install -g commit-agent-cli
+```
+
+Option 2 - Clean npm cache:
+```bash
+npm cache clean --force
+npm install -g commit-agent-cli@latest --force
+```
+
+Option 3 - Find and remove manually:
+```bash
+# Find where npm packages are installed
+npm root -g
+
+# Remove the directory (example paths):
+# nvm: rm -rf ~/.nvm/versions/node/$(node -v)/lib/node_modules/commit-agent-cli
+# Linux: sudo rm -rf /usr/local/lib/node_modules/commit-agent-cli
+# Mac: sudo rm -rf /usr/local/lib/node_modules/commit-agent-cli
+
+# Then reinstall
+npm install -g commit-agent-cli
+```
+
+**Permission errors on Linux/Mac:**
+
+```
+npm error EACCES: permission denied
+```
+
+**Solutions:**
+
+Option 1 - Use nvm (recommended):
+```bash
+# Install nvm if you haven't
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+nvm install node
+npm install -g commit-agent-cli
+```
+
+Option 2 - Fix npm permissions:
+```bash
+mkdir ~/.npm-global
+npm config set prefix '~/.npm-global'
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile
+source ~/.profile
+npm install -g commit-agent-cli
+```
+
+Option 3 - Use sudo (not recommended):
+```bash
+sudo npm install -g commit-agent-cli
+```
+
 ## Support
 
 - **Issues:** [GitHub Issues](https://github.com/sunggyeol/commit-agent-cli/issues)

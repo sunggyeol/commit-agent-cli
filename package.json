@@ -1,6 +1,6 @@
 {
     "name": "commit-agent-cli",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "AI-powered git commit CLI using LangGraph and Claude 4.5",
     "main": "dist/index.js",
     "types": "./dist/index.d.ts",

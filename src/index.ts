@@ -23,21 +23,30 @@ const packageJson = JSON.parse(
 // Check for updates
 const notifier = updateNotifier({
     pkg: packageJson,
-    updateCheckInterval: 1000 * 60 * 60 * 24, // Check once per day
+    updateCheckInterval: 1000 * 60 * 60, // Check once per hour (was 24h)
 });
 
+// Show notification if update is available
 if (notifier.update) {
-    const currentVersion = pc.dim(notifier.update.current);
-    const latestVersion = pc.green(notifier.update.latest);
-    const command = pc.cyan(`npm install -g ${packageJson.name}`);
+    const currentVersion = notifier.update.current;
+    const latestVersion = notifier.update.latest;
     
     console.log('');
-    console.log(pc.yellow('┌────────────────────────────────────────────────────────┐'));
-    console.log(pc.yellow('│') + '  Update available: ' + currentVersion + ' → ' + latestVersion + ' '.repeat(20) + pc.yellow('│'));
-    console.log(pc.yellow('│') + '  Run ' + command + ' to update' + ' '.repeat(10) + pc.yellow('│'));
-    console.log(pc.yellow('└────────────────────────────────────────────────────────┘'));
+    console.log(pc.yellow('╭───────────────────────────────────────────────────────────────────╮'));
+    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '  ' + pc.bold('New version of commit-cli is available!') + '                      ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '  Current: ' + pc.dim(currentVersion) + '  →  Latest: ' + pc.green(pc.bold(latestVersion)) + '                               ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '  ' + pc.dim('Update after you finish by running:') + '                        ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '  ' + pc.cyan(pc.bold(`npm install -g ${packageJson.name}@latest`)) + '            ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
+    console.log(pc.yellow('╰───────────────────────────────────────────────────────────────────╯'));
     console.log('');
 }
+
+// Trigger the notification (non-blocking background check)
+notifier.notify({ defer: false, isGlobal: true });
 
 const CONFIG_PATH = join(homedir(), '.commit-cli.json');
 
