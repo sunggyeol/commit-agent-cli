@@ -51,23 +51,85 @@ function getApp() {
     return app;
 }
 
-export async function generateCommitMessage(diff: string) {
-    const systemPrompt = `You are an expert developer. Your task is to generate a conventional commit message for the provided git diff.
-  
-Rules:
-1. Analyze the diff carefully.
-2. If the diff is ambiguous or references code/files you don't see in the diff but need context for, use the 'read_file' or 'list_dir' tools to explore the codebase.
-3. Keep the commit message concise and following standard conventional commits (e.g., "feat: ...", "fix: ...").
-4. Do NOT output anything else (like "Here is the commit message:"). Just the commit message itself.
+interface CommitPreferences {
+    useConventionalCommits: boolean;
+    commitMessageStyle: 'concise' | 'descriptive';
+}
+
+export async function generateCommitMessage(diff: string, preferences: CommitPreferences) {
+    const conventionalGuide = preferences.useConventionalCommits
+        ? 'Use conventional commit format with prefixes like feat:, fix:, chore:, docs:, style:, refactor:, test:, etc.'
+        : 'Do NOT use conventional commit prefixes. Write natural commit messages.';
+
+    const styleGuide = preferences.commitMessageStyle === 'descriptive'
+        ? 'Be descriptive and detailed. Explain the "why" behind changes when relevant. Multi-line messages are encouraged.'
+        : 'Be concise and to the point. Keep it short, ideally one line.';
+
+    const systemPrompt = `You are an expert developer. Your task is to generate a commit message for the provided git diff.
+
+Available Tools (use SPARINGLY - only when absolutely necessary):
+- git_commit_history: Check last 3-5 commits to understand conventions (use ONLY if diff is ambiguous)
+- git_staged_files: See list of staged files (use ONLY if you need to understand scope)
+- read_file: Read a file (ONLY if diff references unclear code - read MAX 1-2 files, prefer small files)
+- list_dir: List directory contents (RARELY needed)
+
+EFFICIENCY RULES - CRITICAL:
+1. The diff contains ALL the information you need in 90% of cases. START by analyzing it thoroughly.
+2. DO NOT automatically call tools. Only use them if the diff is genuinely unclear.
+3. If using read_file, read ONLY the specific function/class mentioned, not entire files.
+4. NEVER read more than 2 files total.
+5. If checking commit history, limit to 3-5 recent commits maximum.
+6. DO NOT use list_dir unless absolutely critical to understand project structure.
+
+Commit Message Rules:
+1. ${conventionalGuide}
+2. ${styleGuide}
+3. Focus on WHAT changed and WHY (if clear from diff).
+4. OUTPUT FORMAT: Your response must be ONLY the commit message. No explanations, no "Here is...", no analysis.
+5. Do NOT use markdown code blocks or formatting.
+6. If multi-line, use proper git commit format (subject line, blank line, body).
+
+CRITICAL: Your ENTIRE response should be the commit message itself, nothing else. No preamble, no explanation.
+
+REMEMBER: The diff is your primary source. Tools are for edge cases only.
 `;
 
     const messages = [
         new SystemMessage(systemPrompt),
-        new HumanMessage(`Here is the git diff:\n\n${diff}`),
+        new HumanMessage(`Generate a commit message for this diff:\n\n${diff}`),
     ];
 
     const graph = getApp();
     const result = await graph.invoke({ messages });
     const lastMsg = result.messages[result.messages.length - 1];
-    return lastMsg.content;
+    let content = lastMsg.content as string;
+
+    // Post-process to extract just the commit message
+    content = content.trim();
+
+    // Remove common LLM prefixes and markdown
+    const patterns = [
+        /^(?:Here is|Here's|Based on|Looking at|This is|The commit message is|Commit message).*?:\s*/i,
+        /^```[\w]*\n?/,  // Remove opening markdown code blocks
+        /\n?```$/,       // Remove closing markdown code blocks
+    ];
+
+    for (const pattern of patterns) {
+        content = content.replace(pattern, '');
+    }
+
+    // If response has explanation before commit message, try to extract just the message
+    const lines = content.split('\n');
+    if (lines.length > 3 && preferences.useConventionalCommits) {
+        const commitPrefixes = ['feat:', 'fix:', 'chore:', 'docs:', 'style:', 'refactor:', 'test:', 'perf:', 'ci:', 'build:', 'revert:'];
+        const commitLineIndex = lines.findIndex(line =>
+            commitPrefixes.some(prefix => line.trim().toLowerCase().startsWith(prefix))
+        );
+
+        if (commitLineIndex > 0) {
+            content = lines.slice(commitLineIndex).join('\n').trim();
+        }
+    }
+
+    return content.trim();
 }

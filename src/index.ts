@@ -28,6 +28,37 @@ async function storeKey(key: string) {
     }
 }
 
+interface UserPreferences {
+    useConventionalCommits: boolean;
+    commitMessageStyle: 'concise' | 'descriptive';
+}
+
+async function getStoredPreferences(): Promise<UserPreferences | null> {
+    try {
+        const data = await readFile(CONFIG_PATH, 'utf-8');
+        const config = JSON.parse(data);
+        return config.preferences || null;
+    } catch {
+        return null;
+    }
+}
+
+async function storePreferences(prefs: UserPreferences) {
+    try {
+        let config: any = {};
+        try {
+            const data = await readFile(CONFIG_PATH, 'utf-8');
+            config = JSON.parse(data);
+        } catch {
+            // file doesn't exist yet
+        }
+        config.preferences = prefs;
+        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+    } catch (err) {
+        // ignore error
+    }
+}
+
 async function main() {
     intro(pc.bgBlue(pc.white(' commit-cli ')));
 
@@ -67,6 +98,43 @@ async function main() {
         process.exit(1);
     }
 
+    // 3. Check/Set User Preferences
+    let preferences = await getStoredPreferences();
+
+    if (!preferences) {
+        note('Let\'s set up your commit message preferences (one-time setup)', 'First Time Setup');
+
+        const useConventional = await confirm({
+            message: 'Use conventional commit prefixes (feat:, fix:, chore:, etc.)?',
+            initialValue: true,
+        });
+
+        if (isCancel(useConventional)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        const styleChoice = await confirm({
+            message: 'Prefer descriptive commit messages?',
+            active: 'Descriptive (detailed explanations)',
+            inactive: 'Concise (short and to the point)',
+            initialValue: false,
+        });
+
+        if (isCancel(styleChoice)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        preferences = {
+            useConventionalCommits: useConventional as boolean,
+            commitMessageStyle: styleChoice ? 'descriptive' : 'concise',
+        };
+
+        await storePreferences(preferences);
+        note(`Preferences saved! You can change these by editing ${CONFIG_PATH}`, 'Setup Complete');
+    }
+
     // 3. Get Diff
     const s = spinner();
     s.start('Analyzing staged changes...');
@@ -86,7 +154,7 @@ async function main() {
     while (!confirmed) {
         s.start('Generating commit message (Agent is exploring)...');
         try {
-            commitMessage = (await generateCommitMessage(diff)) as string;
+            commitMessage = (await generateCommitMessage(diff, preferences)) as string;
         } catch (error: any) {
             s.stop('Generation failed.');
             cancel(`Error: ${error.message}`);
@@ -94,7 +162,32 @@ async function main() {
         }
         s.stop('Message generated.');
 
-        note(commitMessage, 'Proposed Commit Message');
+        // Format and display the commit message with proper wrapping and highlighting
+        const maxWidth = 80;
+        const lines = commitMessage.split('\n');
+        const wrappedLines: string[] = [];
+
+        for (const line of lines) {
+            if (line.length <= maxWidth) {
+                wrappedLines.push(line);
+            } else {
+                // Wrap long lines
+                const words = line.split(' ');
+                let currentLine = '';
+                for (const word of words) {
+                    if ((currentLine + ' ' + word).trim().length <= maxWidth) {
+                        currentLine = currentLine ? currentLine + ' ' + word : word;
+                    } else {
+                        if (currentLine) wrappedLines.push(currentLine);
+                        currentLine = word;
+                    }
+                }
+                if (currentLine) wrappedLines.push(currentLine);
+            }
+        }
+
+        const formattedMessage = wrappedLines.map(line => pc.cyan(line)).join('\n');
+        note(formattedMessage, pc.bold('Proposed Commit Message'));
 
         const action = await confirm({
             message: 'Do you want to use this message?',

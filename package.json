@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "description": "AI-powered git commit CLI using LangGraph and Claude 4.5",
     "main": "dist/index.js",
+    "types": "./dist/index.d.ts",
     "type": "module",
     "files": [
         "dist"
@@ -26,7 +27,11 @@
         "claude",
         "langgraph"
     ],
-    "author": "",
+    "author": "Commit CLI Contributor",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/sungoh/commit-cli.git"
+    },
     "license": "MIT",
     "dependencies": {
         "@ai-sdk/anthropic": "^0.0.39",
@@ -43,5 +48,8 @@
         "@types/node": "^22.5.4",
         "tsup": "^8.2.4",
         "typescript": "^5.5.4"
+    },
+    "engines": {
+        "node": ">=18"
     }
 }
