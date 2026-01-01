@@ -40,6 +40,7 @@
         "@langchain/core": "^0.3.0",
         "@langchain/langgraph": "^0.2.0",
         "ai": "^3.3.33",
+        "commit-agent-cli": "^0.1.0",
         "dotenv": "^16.4.5",
         "execa": "^9.3.1",
         "zod": "^3.23.8"
