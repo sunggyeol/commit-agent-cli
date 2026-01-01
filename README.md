@@ -1,4 +1,4 @@
-# commit-cli
+# commit-agent-cli
 
 AI-powered git commit CLI that analyzes your changes and generates conventional commit messages using Claude 4.5.
 
@@ -21,7 +21,7 @@ AI-powered git commit CLI that analyzes your changes and generates conventional 
 ## Installation
 
 ```bash
-npm install -g commit-cli
+npm install -g commit-agent-cli
 ```
 
 ## Usage
@@ -89,8 +89,8 @@ You can manually edit this file to change your preferences.
 ## Development
 
 ```bash
-git clone https://github.com/yourusername/commit-cli.git
-cd commit-cli
+git clone https://github.com/sunggyeol/commit-agent-cli.git
+cd commit-agent-cli
 npm install
 npm run build
 npm start

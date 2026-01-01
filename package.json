@@ -1,6 +1,6 @@
 {
-    "name": "commit-cli",
-    "version": "0.0.1",
+    "name": "commit-agent-cli",
+    "version": "0.1.0",
     "description": "AI-powered git commit CLI using LangGraph and Claude 4.5",
     "main": "dist/index.js",
     "types": "./dist/index.d.ts",
@@ -30,7 +30,7 @@
     "author": "Commit CLI Contributor",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/sungoh/commit-cli.git"
+        "url": "git+https://github.com/sunggyeol/commit-agent-cli.git"
     },
     "license": "MIT",
     "dependencies": {
