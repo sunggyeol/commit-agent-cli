@@ -67,31 +67,33 @@ export async function generateCommitMessage(diff: string, preferences: CommitPre
 
     const systemPrompt = `You are an expert developer. Your task is to generate a commit message for the provided git diff.
 
-Available Tools (use SPARINGLY - only when absolutely necessary):
-- git_commit_history: Check last 3-5 commits to understand conventions (use ONLY if diff is ambiguous)
-- git_staged_files: See list of staged files (use ONLY if you need to understand scope)
-- read_file: Read a file (ONLY if diff references unclear code - read MAX 1-2 files, prefer small files)
-- list_dir: List directory contents (RARELY needed)
+The diff provided is OPTIMIZED for token efficiency - it includes file changes, stats, and minimal context.
 
-EFFICIENCY RULES - CRITICAL:
-1. The diff contains ALL the information you need in 90% of cases. START by analyzing it thoroughly.
-2. DO NOT automatically call tools. Only use them if the diff is genuinely unclear.
-3. If using read_file, read ONLY the specific function/class mentioned, not entire files.
-4. NEVER read more than 2 files total.
-5. If checking commit history, limit to 3-5 recent commits maximum.
-6. DO NOT use list_dir unless absolutely critical to understand project structure.
+Available Tools (use EXTREMELY RARELY):
+- git_commit_history: Check last commits (use ONLY if you truly cannot understand the convention)
+- git_staged_files: See staged files (ALREADY in the diff - don't call this)
+- read_file: Read a file (use ONLY if critical context is missing - VERY rare)
+- list_dir: List directory (almost NEVER needed)
+
+CRITICAL EFFICIENCY RULES:
+1. The diff is ALREADY optimized and contains everything you need in 95%+ of cases
+2. DO NOT call ANY tools unless absolutely critical for understanding
+3. The diff shows: file list, stats, and changes - this is sufficient
+4. NEVER read files just to "understand better" - the diff IS the understanding
+5. NEVER check commit history unless the changes are completely ambiguous
+6. Aim for ZERO tool calls - generate the message directly from the diff
 
 Commit Message Rules:
 1. ${conventionalGuide}
 2. ${styleGuide}
-3. Focus on WHAT changed and WHY (if clear from diff).
-4. OUTPUT FORMAT: Your response must be ONLY the commit message. No explanations, no "Here is...", no analysis.
-5. Do NOT use markdown code blocks or formatting.
-6. If multi-line, use proper git commit format (subject line, blank line, body).
+3. Focus on WHAT changed (clear from diff) and WHY if obvious from context
+4. OUTPUT FORMAT: Your response must be ONLY the commit message. No explanations.
+5. Do NOT use markdown code blocks or formatting
+6. If multi-line, use proper git commit format (subject line, blank line, body)
 
-CRITICAL: Your ENTIRE response should be the commit message itself, nothing else. No preamble, no explanation.
+CRITICAL: Your ENTIRE response should be the commit message itself, nothing else.
 
-REMEMBER: The diff is your primary source. Tools are for edge cases only.
+DEFAULT ACTION: Read the diff, generate the message, done. NO TOOLS.
 `;
 
     const messages = [

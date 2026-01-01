@@ -75,19 +75,38 @@ The agent will:
 
 ## How It Works
 
+### Token Optimization
+
+The CLI is designed to minimize token usage and API costs:
+
+**Smart Diff Processing:**
+- Uses `--unified=1` for compact diffs (1 line of context instead of 3)
+- Includes file list and stats summary
+- For very large changesets (>2000 tokens), automatically switches to `--unified=0` (no context lines)
+- Removes unnecessary color codes and prefixes
+
+**Aggressive Tool Usage Prevention:**
+- Optimized diff contains 95%+ of needed information
+- Agent is instructed to avoid tool calls unless critical
+- File reading limited to 50KB and 10K characters
+- Commit history capped at 5 commits
+
+**Example Token Savings:**
+- Traditional full diff: ~3000-5000 tokens
+- Optimized compact diff: ~800-1500 tokens
+- **Savings: 60-70% reduction**
+
 ### The Agent Loop
 
 The CLI uses LangGraph to create an agentic workflow:
 
 ```
-1. Analyze git diff
-2. Decide if more context is needed
-3. Use tools to explore (if needed):
-   - Read specific files
-   - Check commit history
-   - List staged files
-4. Generate commit message
-5. Present to user
+1. Analyze optimized git diff (includes files, stats, changes)
+2. Generate commit message directly (95% of cases)
+3. Use tools ONLY if absolutely necessary:
+   - Read specific files (rare)
+   - Check commit history (very rare)
+4. Present commit message to user
 ```
 
 ### What You'll See

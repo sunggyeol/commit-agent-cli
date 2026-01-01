@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { intro, outro, text, spinner, confirm, isCancel, cancel, note } from '@clack/prompts';
-import { getStagedDiff, commit, push, isGitRepository } from './git.js';
+import { getStagedDiffSmart, commit, push, isGitRepository } from './git.js';
 import { generateCommitMessage } from './agent.js';
 import pc from 'picocolors';
 import updateNotifier from 'update-notifier';
@@ -168,7 +168,7 @@ async function main() {
     // 3. Get Diff
     const s = spinner();
     s.start('Analyzing staged changes...');
-    const diff = await getStagedDiff();
+    const diff = await getStagedDiffSmart();
 
     if (!diff) {
         s.stop('No staged changes found.');
