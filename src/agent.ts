@@ -56,7 +56,7 @@ interface CommitPreferences {
     commitMessageStyle: 'concise' | 'descriptive';
 }
 
-export async function generateCommitMessage(diff: string, preferences: CommitPreferences) {
+export async function generateCommitMessage(diff: string, preferences: CommitPreferences, userFeedback?: string) {
     const conventionalGuide = preferences.useConventionalCommits
         ? 'Use conventional commit format with prefixes like feat:, fix:, chore:, docs:, style:, refactor:, test:, etc.'
         : 'Do NOT use conventional commit prefixes. Write natural commit messages.';
@@ -98,7 +98,7 @@ DEFAULT ACTION: Read the diff, generate the message, done. NO TOOLS.
 
     const messages = [
         new SystemMessage(systemPrompt),
-        new HumanMessage(`Generate a commit message for this diff:\n\n${diff}`),
+        new HumanMessage(`Generate a commit message for this diff:\n\n${diff}${userFeedback ? `\n\nUser feedback on previous attempt: ${userFeedback}\nPlease adjust the commit message based on this feedback.` : ''}`),
     ];
 
     const graph = getApp();

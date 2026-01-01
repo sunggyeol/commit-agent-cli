@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import 'dotenv/config';
-import { intro, outro, text, spinner, confirm, isCancel, cancel, note } from '@clack/prompts';
+import { intro, outro, text, spinner, confirm, isCancel, cancel, note, select } from '@clack/prompts';
 import { getStagedDiffSmart, commit, push, isGitRepository } from './git.js';
 import { generateCommitMessage } from './agent.js';
 import pc from 'picocolors';
@@ -143,8 +143,12 @@ async function main() {
     if (!preferences) {
         note('Let\'s set up your commit message preferences (one-time setup)', 'First Time Setup');
 
-        const useConventional = await confirm({
+        const useConventional = await select({
             message: 'Use conventional commit prefixes (feat:, fix:, chore:, etc.)?',
+            options: [
+                { value: true, label: 'Yes' },
+                { value: false, label: 'No' }
+            ],
             initialValue: true,
         });
 
@@ -153,10 +157,12 @@ async function main() {
             process.exit(0);
         }
 
-        const styleChoice = await confirm({
+        const styleChoice = await select({
             message: 'Prefer descriptive commit messages?',
-            active: 'Descriptive (detailed explanations)',
-            inactive: 'Concise (short and to the point)',
+            options: [
+                { value: true, label: 'Descriptive (detailed explanations)' },
+                { value: false, label: 'Concise (short and to the point)' }
+            ],
             initialValue: false,
         });
 
@@ -189,11 +195,13 @@ async function main() {
     // 4. Generate Message Loop
     let commitMessage = '';
     let confirmed = false;
+    let userFeedback: string | undefined = undefined;
 
     while (!confirmed) {
         s.start('Generating commit message (Agent is exploring)...');
         try {
-            commitMessage = (await generateCommitMessage(diff, preferences)) as string;
+            commitMessage = (await generateCommitMessage(diff, preferences, userFeedback)) as string;
+            userFeedback = undefined; // Reset feedback after using it
         } catch (error: any) {
             s.stop('Generation failed.');
             
@@ -205,8 +213,12 @@ async function main() {
                 
                 cancel('Invalid API Key detected.');
                 
-                const retryWithNewKey = await confirm({
+                const retryWithNewKey = await select({
                     message: 'Would you like to enter a new API key?',
+                    options: [
+                        { value: true, label: 'Yes' },
+                        { value: false, label: 'No' }
+                    ],
                     initialValue: true,
                 });
 
@@ -285,10 +297,12 @@ async function main() {
         const formattedMessage = wrappedLines.map(line => pc.cyan(line)).join('\n');
         note(formattedMessage, pc.bold('Proposed Commit Message'));
 
-        const action = await confirm({
+        const action = await select({
             message: 'Do you want to use this message?',
-            active: 'Yes, commit',
-            inactive: 'No, regenerate or cancel'
+            options: [
+                { value: true, label: 'Yes, commit' },
+                { value: false, label: 'No, regenerate or cancel' }
+            ],
         });
 
         if (isCancel(action)) {
@@ -299,15 +313,30 @@ async function main() {
         if (action) {
             confirmed = true;
         } else {
-            const nextStep = await confirm({
+            const nextStep = await select({
                 message: 'Try again?',
-                active: 'Regenerate',
-                inactive: 'Cancel'
+                options: [
+                    { value: true, label: 'Regenerate' },
+                    { value: false, label: 'Cancel' }
+                ],
             });
             if (!nextStep || isCancel(nextStep)) {
                 cancel('Operation cancelled.');
                 process.exit(0);
             }
+
+            // Ask for feedback on how to improve the message
+            const feedback = await text({
+                message: 'How should I adjust it?',
+                placeholder: 'e.g., make it shorter, add more detail, or press enter to skip',
+            });
+
+            if (isCancel(feedback)) {
+                cancel('Operation cancelled.');
+                process.exit(0);
+            }
+
+            userFeedback = feedback && feedback.trim() !== '' ? feedback as string : undefined;
             // Loop continues to regenerate
         }
     }
@@ -318,8 +347,12 @@ async function main() {
     s.stop('Committed!');
 
     // 6. Push?
-    const shouldPush = await confirm({
+    const shouldPush = await select({
         message: 'Do you want to push changes now?',
+        options: [
+            { value: true, label: 'Yes' },
+            { value: false, label: 'No' }
+        ],
     });
 
     if (isCancel(shouldPush)) {
