@@ -30,6 +30,7 @@ You'll be prompted to:
 - 👁️ Transparent agent actions
 - ⚙️ Customizable commit styles
 - 🔒 Secure local storage
+- 🔔 Auto update notifications
 
 ## Documentation
 

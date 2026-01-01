@@ -4,10 +4,40 @@ import { intro, outro, text, spinner, confirm, isCancel, cancel, note } from '@c
 import { getStagedDiff, commit, push, isGitRepository } from './git.js';
 import { generateCommitMessage } from './agent.js';
 import pc from 'picocolors';
+import updateNotifier from 'update-notifier';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join as joinPath } from 'path';
 
 import { homedir } from 'os';
 import { join } from 'path';
 import { readFile, writeFile } from 'fs/promises';
+
+// Get package.json for version checking
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJson = JSON.parse(
+    readFileSync(joinPath(__dirname, '../package.json'), 'utf-8')
+);
+
+// Check for updates
+const notifier = updateNotifier({
+    pkg: packageJson,
+    updateCheckInterval: 1000 * 60 * 60 * 24, // Check once per day
+});
+
+if (notifier.update) {
+    const currentVersion = pc.dim(notifier.update.current);
+    const latestVersion = pc.green(notifier.update.latest);
+    const command = pc.cyan(`npm install -g ${packageJson.name}`);
+    
+    console.log('');
+    console.log(pc.yellow('┌────────────────────────────────────────────────────────┐'));
+    console.log(pc.yellow('│') + '  Update available: ' + currentVersion + ' → ' + latestVersion + ' '.repeat(20) + pc.yellow('│'));
+    console.log(pc.yellow('│') + '  Run ' + command + ' to update' + ' '.repeat(10) + pc.yellow('│'));
+    console.log(pc.yellow('└────────────────────────────────────────────────────────┘'));
+    console.log('');
+}
 
 const CONFIG_PATH = join(homedir(), '.commit-cli.json');
 
