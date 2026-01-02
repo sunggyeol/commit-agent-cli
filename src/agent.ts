@@ -1,23 +1,53 @@
 import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { StateGraph, MessagesAnnotation } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { tools } from './tools.js';
 
+interface ModelConfig {
+    provider: 'anthropic' | 'google';
+    model: string;
+}
+
+interface CommitPreferences {
+    useConventionalCommits: boolean;
+    commitMessageStyle: 'concise' | 'descriptive';
+    customGuideline?: string;
+}
+
 // Lazily initialize the graph so we can pick up the API key if set via CLI input
 let app: any = null;
+let currentConfig: ModelConfig | null = null;
 
-function getApp() {
+function getApp(config: ModelConfig) {
+    // Reset app if config changed
+    if (app && currentConfig && 
+        (currentConfig.provider !== config.provider || currentConfig.model !== config.model)) {
+        app = null;
+    }
+    
     if (app) return app;
 
-    // Define the model
-    const model = new ChatAnthropic({
-        model: 'claude-sonnet-4-5-20250929',
-        temperature: 0,
-        // It will automatically look for ANTHROPIC_API_KEY in process.env if not provided,
-        // but explicit assignment ensures it picks up dynamic changes if any.
-        apiKey: process.env.ANTHROPIC_API_KEY,
-    }).bindTools(tools);
+    currentConfig = config;
+
+    // Define the model based on provider
+    let model: any;
+    
+    if (config.provider === 'anthropic') {
+        model = new ChatAnthropic({
+            model: config.model,
+            temperature: 0,
+            apiKey: process.env.ANTHROPIC_API_KEY,
+        }).bindTools(tools);
+    } else {
+        model = new ChatGoogleGenerativeAI({
+            model: config.model,
+            temperature: 0,
+            apiKey: process.env.GOOGLE_API_KEY,
+            thinkingBudget: 0, // Disable thinking to prevent quota issues
+        }).bindTools(tools);
+    }
 
     // Define the tools node
     const toolNode = new ToolNode(tools);
@@ -51,19 +81,23 @@ function getApp() {
     return app;
 }
 
-interface CommitPreferences {
-    useConventionalCommits: boolean;
-    commitMessageStyle: 'concise' | 'descriptive';
-}
-
-export async function generateCommitMessage(diff: string, preferences: CommitPreferences, userFeedback?: string) {
+export async function generateCommitMessage(
+    diff: string, 
+    preferences: CommitPreferences, 
+    config: ModelConfig,
+    userFeedback?: string
+) {
     const conventionalGuide = preferences.useConventionalCommits
         ? 'Use conventional commit format with prefixes like feat:, fix:, chore:, docs:, style:, refactor:, test:, etc.'
-        : 'Do NOT use conventional commit prefixes. Write natural commit messages.';
+        : 'Do NOT use conventional commit prefixes (no feat:, fix:, etc.). Write natural, plain commit messages without any prefixes.';
 
     const styleGuide = preferences.commitMessageStyle === 'descriptive'
         ? 'Be descriptive and detailed. Explain the "why" behind changes when relevant. Multi-line messages are encouraged.'
         : 'Be concise and to the point. Keep it short, ideally one line.';
+
+    const customGuideSection = preferences.customGuideline 
+        ? `\n\nCUSTOM GUIDELINES (MUST FOLLOW):\n${preferences.customGuideline}`
+        : '';
 
     const systemPrompt = `You are an expert developer. Your task is to generate a commit message for the provided git diff.
 
@@ -89,9 +123,10 @@ Commit Message Rules:
 3. Focus on WHAT changed (clear from diff) and WHY if obvious from context
 4. OUTPUT FORMAT: Your response must be ONLY the commit message. No explanations.
 5. Do NOT use markdown code blocks or formatting
-6. If multi-line, use proper git commit format (subject line, blank line, body)
+6. If multi-line, use proper git commit format (subject line, blank line, body)${customGuideSection}
 
 CRITICAL: Your ENTIRE response should be the commit message itself, nothing else.
+IMPORTANT: Follow the conventional commit rule strictly - if told NOT to use prefixes, do NOT use them at all.
 
 DEFAULT ACTION: Read the diff, generate the message, done. NO TOOLS.
 `;
@@ -101,7 +136,7 @@ DEFAULT ACTION: Read the diff, generate the message, done. NO TOOLS.
         new HumanMessage(`Generate a commit message for this diff:\n\n${diff}${userFeedback ? `\n\nUser feedback on previous attempt: ${userFeedback}\nPlease adjust the commit message based on this feedback.` : ''}`),
     ];
 
-    const graph = getApp();
+    const graph = getApp(config);
     const result = await graph.invoke({ messages });
     const lastMsg = result.messages[result.messages.length - 1];
     let content = lastMsg.content as string;

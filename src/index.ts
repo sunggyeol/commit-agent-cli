@@ -58,6 +58,56 @@ notifier.notify({ defer: false, isGlobal: true });
 
 const CONFIG_PATH = join(homedir(), '.commit-cli.json');
 
+type AIProvider = 'anthropic' | 'google';
+
+interface ModelConfig {
+    provider: AIProvider;
+    model: string;
+}
+
+interface AppConfig {
+    provider: AIProvider;
+    model: string;
+    ANTHROPIC_API_KEY?: string;
+    GOOGLE_API_KEY?: string;
+    preferences?: UserPreferences;
+}
+
+interface UserPreferences {
+    useConventionalCommits: boolean;
+    commitMessageStyle: 'concise' | 'descriptive';
+    customGuideline?: string;
+}
+
+// Model options for each provider
+const ANTHROPIC_MODELS = {
+    'claude-sonnet-4-20250514': 'Claude Sonnet 4.5',
+    'claude-opus-4-20250514': 'Claude Opus 4.5',
+} as const;
+
+const GOOGLE_MODELS = {
+    'gemini-3-flash-preview': 'Gemini 3.0 Flash Preview',
+    'gemini-3-pro-preview': 'Gemini 3.0 Pro Preview',
+} as const;
+
+async function getStoredConfig(): Promise<AppConfig | null> {
+    try {
+        const data = await readFile(CONFIG_PATH, 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return null;
+    }
+}
+
+async function storeConfig(config: AppConfig) {
+    try {
+        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+    } catch (err) {
+        // ignore error
+    }
+}
+
+// Legacy function for backward compatibility
 async function getStoredKey(): Promise<string | null> {
     try {
         const data = await readFile(CONFIG_PATH, 'utf-8');
@@ -67,24 +117,21 @@ async function getStoredKey(): Promise<string | null> {
     }
 }
 
+// Legacy function for backward compatibility
 async function storeKey(key: string) {
     try {
-        await writeFile(CONFIG_PATH, JSON.stringify({ ANTHROPIC_API_KEY: key }), { mode: 0o600 });
+        const config = await getStoredConfig() || {} as AppConfig;
+        config.ANTHROPIC_API_KEY = key;
+        await storeConfig(config);
     } catch (err) {
         // ignore error
     }
 }
 
-interface UserPreferences {
-    useConventionalCommits: boolean;
-    commitMessageStyle: 'concise' | 'descriptive';
-}
-
 async function getStoredPreferences(): Promise<UserPreferences | null> {
     try {
-        const data = await readFile(CONFIG_PATH, 'utf-8');
-        const config = JSON.parse(data);
-        return config.preferences || null;
+        const config = await getStoredConfig();
+        return config?.preferences || null;
     } catch {
         return null;
     }
@@ -92,38 +139,77 @@ async function getStoredPreferences(): Promise<UserPreferences | null> {
 
 async function storePreferences(prefs: UserPreferences) {
     try {
-        let config: any = {};
-        try {
-            const data = await readFile(CONFIG_PATH, 'utf-8');
-            config = JSON.parse(data);
-        } catch {
-            // file doesn't exist yet
-        }
+        const config = await getStoredConfig() || {} as AppConfig;
         config.preferences = prefs;
-        await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+        await storeConfig(config);
     } catch (err) {
         // ignore error
     }
 }
 
-async function main() {
-    intro(pc.bgBlue(pc.white(' commit-cli ')));
+async function setupProviderAndModel(): Promise<ModelConfig> {
+    const providerChoice = await select({
+        message: 'Select AI Provider:',
+        options: [
+            { value: 'anthropic', label: 'Anthropic (Claude)' },
+            { value: 'google', label: 'Google (Gemini)' }
+        ],
+        initialValue: 'anthropic',
+    });
 
-    // 1. Check API Key
-    // Priority: env var > stored config > prompt
-    let apiKey = process.env.ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-        apiKey = await getStoredKey() || undefined;
+    if (isCancel(providerChoice)) {
+        cancel('Operation cancelled.');
+        process.exit(0);
     }
 
-    if (!apiKey) {
+    const provider = providerChoice as AIProvider;
+    let model: string;
+
+    if (provider === 'anthropic') {
+        const modelChoice = await select({
+            message: 'Select Anthropic Model:',
+            options: [
+                { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4.5 (Recommended)' },
+                { value: 'claude-opus-4-20250514', label: 'Claude Opus 4.5 (Most Capable)' }
+            ],
+            initialValue: 'claude-sonnet-4-20250514',
+        });
+
+        if (isCancel(modelChoice)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        model = modelChoice as string;
+    } else {
+        const modelChoice = await select({
+            message: 'Select Google Model:',
+            options: [
+                { value: 'gemini-3-flash-preview', label: 'Gemini 3.0 Flash Preview (Fast)' },
+                { value: 'gemini-3-pro-preview', label: 'Gemini 3.0 Pro Preview (Most Capable)' }
+            ],
+            initialValue: 'gemini-3-flash-preview',
+        });
+
+        if (isCancel(modelChoice)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        model = modelChoice as string;
+    }
+
+    return { provider, model };
+}
+
+async function promptForApiKey(provider: AIProvider): Promise<string> {
+    if (provider === 'anthropic') {
         const key = await text({
-            message: 'Enter your Anthropic API Key (sk-...):',
+            message: 'Enter your Anthropic API Key (sk-ant-...):',
             placeholder: 'sk-ant-api...',
             validate: (value) => {
                 if (!value) return 'API Key is required';
-                if (!value.startsWith('sk-')) return 'Invalid API Key format (should start with sk-)';
+                if (!value.startsWith('sk-ant-')) return 'Invalid API Key format (should start with sk-ant-)';
             }
         });
 
@@ -132,11 +218,200 @@ async function main() {
             process.exit(0);
         }
 
-        apiKey = key as string;
-        await storeKey(apiKey);
+        return key as string;
+    } else {
+        const key = await text({
+            message: 'Enter your Google AI API Key:',
+            placeholder: 'AIza...',
+            validate: (value) => {
+                if (!value) return 'API Key is required';
+            }
+        });
+
+        if (isCancel(key)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        return key as string;
+    }
+}
+
+async function showSettingsMenu(currentConfig: AppConfig): Promise<AppConfig | null> {
+    const providerLabel = currentConfig.provider === 'anthropic' ? 'Anthropic (Claude)' : 'Google (Gemini)';
+    const modelName = currentConfig.provider === 'anthropic' 
+        ? ANTHROPIC_MODELS[currentConfig.model as keyof typeof ANTHROPIC_MODELS] || currentConfig.model
+        : GOOGLE_MODELS[currentConfig.model as keyof typeof GOOGLE_MODELS] || currentConfig.model;
+    
+    note(`Current: ${providerLabel} - ${modelName}`, 'Current Configuration');
+
+    const settingChoice = await select({
+        message: 'What would you like to change?',
+        options: [
+            { value: 'provider', label: 'Change AI Provider & Model' },
+            { value: 'apikey', label: 'Update API Key' },
+            { value: 'preferences', label: 'Change Commit Preferences' },
+            { value: 'cancel', label: 'Cancel' }
+        ],
+    });
+
+    if (isCancel(settingChoice) || settingChoice === 'cancel') {
+        return null;
     }
 
-    process.env.ANTHROPIC_API_KEY = apiKey;
+    const newConfig = { ...currentConfig };
+
+    if (settingChoice === 'provider') {
+        const modelConfig = await setupProviderAndModel();
+        newConfig.provider = modelConfig.provider;
+        newConfig.model = modelConfig.model;
+        
+        // Check if we need to prompt for API key for the new provider
+        const keyField = modelConfig.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GOOGLE_API_KEY';
+        if (!newConfig[keyField]) {
+            const apiKey = await promptForApiKey(modelConfig.provider);
+            newConfig[keyField] = apiKey;
+        }
+        
+        await storeConfig(newConfig);
+        return newConfig;
+    } else if (settingChoice === 'apikey') {
+        const apiKey = await promptForApiKey(currentConfig.provider);
+        const keyField = currentConfig.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GOOGLE_API_KEY';
+        newConfig[keyField] = apiKey;
+        await storeConfig(newConfig);
+        return newConfig;
+    } else if (settingChoice === 'preferences') {
+        const useConventional = await select({
+            message: 'Use conventional commit prefixes (feat:, fix:, chore:, etc.)?',
+            options: [
+                { value: true, label: 'Yes' },
+                { value: false, label: 'No' }
+            ],
+            initialValue: currentConfig.preferences?.useConventionalCommits ?? true,
+        });
+
+        if (isCancel(useConventional)) {
+            return null;
+        }
+
+        const styleChoice = await select({
+            message: 'Prefer descriptive commit messages?',
+            options: [
+                { value: true, label: 'Descriptive (detailed explanations)' },
+                { value: false, label: 'Concise (short and to the point)' }
+            ],
+            initialValue: currentConfig.preferences?.commitMessageStyle === 'descriptive',
+        });
+
+        if (isCancel(styleChoice)) {
+            return null;
+        }
+
+        const addCustomGuideline = await select({
+            message: 'Add custom commit message guideline?',
+            options: [
+                { value: true, label: 'Yes, add custom guideline' },
+                { value: false, label: 'No, use defaults' }
+            ],
+            initialValue: false,
+        });
+
+        if (isCancel(addCustomGuideline)) {
+            return null;
+        }
+
+        let customGuideline: string | undefined = currentConfig.preferences?.customGuideline;
+
+        if (addCustomGuideline) {
+            const guidelineInput = await text({
+                message: 'Enter your custom commit message guideline:',
+                placeholder: 'e.g., Always mention ticket number, use imperative mood...',
+                initialValue: currentConfig.preferences?.customGuideline || '',
+            });
+
+            if (isCancel(guidelineInput)) {
+                return null;
+            }
+
+            customGuideline = (guidelineInput as string).trim() || undefined;
+        } else {
+            customGuideline = undefined;
+        }
+
+        newConfig.preferences = {
+            useConventionalCommits: useConventional as boolean,
+            commitMessageStyle: styleChoice ? 'descriptive' : 'concise',
+            customGuideline,
+        };
+
+        await storeConfig(newConfig);
+        return newConfig;
+    }
+
+    return null;
+}
+
+async function main() {
+    intro(pc.bgBlue(pc.white(' commit-cli ')));
+
+    // 1. Check/Setup Configuration
+    let config = await getStoredConfig();
+    
+    // Handle backward compatibility: if old config exists with only ANTHROPIC_API_KEY
+    if (config && config.ANTHROPIC_API_KEY && !config.provider) {
+        note('Upgrading your configuration to support multiple AI providers...', 'Configuration Update');
+        
+        // Migrate old config to new format, defaulting to Anthropic with Sonnet 4.5
+        config.provider = 'anthropic';
+        config.model = 'claude-sonnet-4-20250514';
+        
+        await storeConfig(config);
+        note('Configuration upgraded! You can now switch providers anytime using the settings menu.', 'Upgrade Complete');
+    }
+    
+    // If no config exists, run first-time setup
+    if (!config || !config.provider || !config.model) {
+        note('Welcome! Let\'s set up your AI provider and preferences', 'First Time Setup');
+        
+        const modelConfig = await setupProviderAndModel();
+        const apiKey = await promptForApiKey(modelConfig.provider);
+        
+        config = {
+            provider: modelConfig.provider,
+            model: modelConfig.model,
+            ...(modelConfig.provider === 'anthropic' 
+                ? { ANTHROPIC_API_KEY: apiKey } 
+                : { GOOGLE_API_KEY: apiKey }
+            )
+        };
+        
+        await storeConfig(config);
+    }
+
+    // Check if API key exists for the selected provider
+    const apiKeyField = config.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GOOGLE_API_KEY';
+    const envKeyField = config.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GOOGLE_API_KEY';
+    
+    // Priority: env var > stored config > prompt
+    let apiKey = process.env[envKeyField];
+    
+    if (!apiKey) {
+        apiKey = config[apiKeyField] || undefined;
+    }
+    
+    if (!apiKey) {
+        apiKey = await promptForApiKey(config.provider);
+        config[apiKeyField] = apiKey;
+        await storeConfig(config);
+    }
+
+    // Set environment variable for the agent
+    if (config.provider === 'anthropic') {
+        process.env.ANTHROPIC_API_KEY = apiKey;
+    } else {
+        process.env.GOOGLE_API_KEY = apiKey;
+    }
 
     // 2. Check Git Repo
     const isRepo = await isGitRepository();
@@ -146,11 +421,9 @@ async function main() {
     }
 
     // 3. Check/Set User Preferences
-    let preferences = await getStoredPreferences();
+    let preferences = config.preferences;
 
     if (!preferences) {
-        note('Let\'s set up your commit message preferences (one-time setup)', 'First Time Setup');
-
         const useConventional = await select({
             message: 'Use conventional commit prefixes (feat:, fix:, chore:, etc.)?',
             options: [
@@ -179,13 +452,45 @@ async function main() {
             process.exit(0);
         }
 
+        const addCustomGuideline = await select({
+            message: 'Add custom commit message guideline? (optional)',
+            options: [
+                { value: false, label: 'No, use defaults' },
+                { value: true, label: 'Yes, add custom guideline' }
+            ],
+            initialValue: false,
+        });
+
+        if (isCancel(addCustomGuideline)) {
+            cancel('Operation cancelled.');
+            process.exit(0);
+        }
+
+        let customGuideline: string | undefined;
+
+        if (addCustomGuideline) {
+            const guidelineInput = await text({
+                message: 'Enter your custom commit message guideline:',
+                placeholder: 'e.g., Always mention ticket number, use imperative mood...',
+            });
+
+            if (isCancel(guidelineInput)) {
+                cancel('Operation cancelled.');
+                process.exit(0);
+            }
+
+            customGuideline = (guidelineInput as string).trim() || undefined;
+        }
+
         preferences = {
             useConventionalCommits: useConventional as boolean,
             commitMessageStyle: styleChoice ? 'descriptive' : 'concise',
+            customGuideline,
         };
 
-        await storePreferences(preferences);
-        note(`Preferences saved! You can change these by editing ${CONFIG_PATH}`, 'Setup Complete');
+        config.preferences = preferences;
+        await storeConfig(config);
+        note(`Preferences saved! You can change these anytime in the settings menu.`, 'Setup Complete');
     }
 
     // 3. Get Diff
@@ -208,7 +513,7 @@ async function main() {
     while (!confirmed) {
         s.start('Generating commit message (Agent is exploring)...');
         try {
-            commitMessage = (await generateCommitMessage(diff, preferences, userFeedback)) as string;
+            commitMessage = (await generateCommitMessage(diff, preferences, config, userFeedback)) as string;
             userFeedback = undefined; // Reset feedback after using it
         } catch (error: any) {
             s.stop('Generation failed.');
@@ -217,7 +522,8 @@ async function main() {
             if (error.message?.includes('401') || 
                 error.message?.includes('authentication_error') || 
                 error.message?.includes('invalid x-api-key') ||
-                error.message?.includes('invalid api key')) {
+                error.message?.includes('invalid api key') ||
+                error.message?.includes('API key not valid')) {
                 
                 cancel('Invalid API Key detected.');
                 
@@ -235,23 +541,20 @@ async function main() {
                     process.exit(0);
                 }
 
-                const newKey = await text({
-                    message: 'Enter your Anthropic API Key (sk-...):',
-                    placeholder: 'sk-ant-api...',
-                    validate: (value) => {
-                        if (!value) return 'API Key is required';
-                        if (!value.startsWith('sk-')) return 'Invalid API Key format (should start with sk-)';
-                    }
-                });
-
-                if (isCancel(newKey)) {
-                    cancel('Operation cancelled.');
-                    process.exit(0);
+                const newKey = await promptForApiKey(config.provider);
+                apiKey = newKey;
+                
+                // Update config with new key
+                const keyField = config.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'GOOGLE_API_KEY';
+                config[keyField] = apiKey;
+                await storeConfig(config);
+                
+                // Set environment variable
+                if (config.provider === 'anthropic') {
+                    process.env.ANTHROPIC_API_KEY = apiKey;
+                } else {
+                    process.env.GOOGLE_API_KEY = apiKey;
                 }
-
-                apiKey = newKey as string;
-                process.env.ANTHROPIC_API_KEY = apiKey;
-                await storeKey(apiKey);
                 
                 note('API Key updated. Retrying...', 'Key Updated');
                 continue; // Retry with new key
@@ -308,8 +611,9 @@ async function main() {
         const action = await select({
             message: 'Do you want to use this message?',
             options: [
-                { value: true, label: 'Yes, commit' },
-                { value: false, label: 'No, regenerate or cancel' }
+                { value: 'commit', label: 'Yes, commit' },
+                { value: 'regenerate', label: 'No, regenerate' },
+                { value: 'settings', label: 'Change settings' }
             ],
         });
 
@@ -318,8 +622,27 @@ async function main() {
             process.exit(0);
         }
 
-        if (action) {
+        if (action === 'commit') {
             confirmed = true;
+        } else if (action === 'settings') {
+            // Show settings menu
+            const settingsResult = await showSettingsMenu(config);
+            if (settingsResult) {
+                config = settingsResult;
+                // Update preferences from config
+                preferences = config.preferences || preferences;
+                // Update environment variables
+                if (config.provider === 'anthropic') {
+                    process.env.ANTHROPIC_API_KEY = config.ANTHROPIC_API_KEY || '';
+                    delete process.env.GOOGLE_API_KEY;
+                } else {
+                    process.env.GOOGLE_API_KEY = config.GOOGLE_API_KEY || '';
+                    delete process.env.ANTHROPIC_API_KEY;
+                }
+                // Reset agent with new config - will be done in agent.ts
+                note('Settings updated! Regenerating with new configuration...', 'Updated');
+            }
+            // Continue loop to regenerate
         } else {
             const nextStep = await select({
                 message: 'Try again?',

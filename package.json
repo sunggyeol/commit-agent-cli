@@ -1,7 +1,7 @@
 {
     "name": "commit-agent-cli",
-    "version": "0.1.7",
-    "description": "AI-powered git commit CLI using LangGraph and Claude 4.5",
+    "version": "0.2.0",
+    "description": "AI-powered git commit CLI using LangGraph and Claude 4.5 or Gemini",
     "main": "dist/index.js",
     "types": "./dist/index.d.ts",
     "type": "module",
@@ -38,6 +38,7 @@
         "@clack/prompts": "^0.7.0",
         "@langchain/anthropic": "^0.3.0",
         "@langchain/core": "^0.3.0",
+        "@langchain/google-genai": "^0.1.2",
         "@langchain/langgraph": "^0.2.0",
         "ai": "^3.3.33",
         "commit-agent-cli": "^0.1.0",

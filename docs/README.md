@@ -40,10 +40,16 @@ Then add to your `package.json`:
 
 ### 1. Get Your API Key
 
+**For Anthropic (Claude):**
 1. Go to [Anthropic Console](https://console.anthropic.com)
 2. Create an account or sign in
 3. Navigate to API Keys
-4. Create a new API key
+4. Create a new API key (starts with `sk-ant-`)
+
+**For Google (Gemini):**
+1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Sign in with your Google account
+3. Create an API key (starts with `AIza`)
 
 ### 2. First Run
 
@@ -53,9 +59,14 @@ commit
 ```
 
 You'll be prompted to:
-- Enter your Anthropic API Key
+- Select AI Provider (Anthropic or Google)
+- Choose your preferred model:
+  - **Anthropic**: Claude Sonnet 4.5 (recommended) or Claude Opus 4.5
+  - **Google**: Gemini 3.0 Flash Preview (fast) or Gemini 3.0 Pro Preview (most capable)
+- Enter your API Key
 - Choose whether to use conventional commit prefixes (feat:, fix:, etc.)
 - Select commit message style (concise vs descriptive)
+- Optionally add custom commit message guidelines
 
 Your preferences are saved in `~/.commit-cli.json`
 
@@ -69,8 +80,8 @@ commit
 The agent will:
 1. Analyze your staged changes
 2. Explore your codebase if needed (you'll see what it's doing)
-3. Generate a commit message
-4. Let you review, regenerate, or edit
+3. Generate a commit message using your selected AI provider
+4. Let you review, regenerate, change settings, or edit
 5. Commit and optionally push
 
 ## How It Works
@@ -154,13 +165,37 @@ The agent is designed to be efficient:
 
 ```json
 {
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
   "ANTHROPIC_API_KEY": "sk-ant-...",
+  "GOOGLE_API_KEY": null,
   "preferences": {
     "useConventionalCommits": true,
-    "commitMessageStyle": "concise"
+    "commitMessageStyle": "concise",
+    "customGuideline": "Always mention ticket number in format [PROJ-123]"
   }
 }
 ```
+
+### Provider Options
+
+**`provider`** (string)
+- `"anthropic"`: Use Anthropic Claude models
+- `"google"`: Use Google Gemini models
+
+**`model`** (string)
+- For Anthropic: `"claude-sonnet-4-20250514"` or `"claude-opus-4-20250514"`
+- For Google: `"gemini-3-flash-preview"` or `"gemini-3-pro-preview"`
+
+### API Keys
+
+**`ANTHROPIC_API_KEY`** (string)
+- Format: `sk-ant-...`
+- Get it from: [Anthropic Console](https://console.anthropic.com)
+
+**`GOOGLE_API_KEY`** (string)
+- Format: `AIza...`
+- Get it from: [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ### Preference Options
 
@@ -172,18 +207,34 @@ The agent is designed to be efficient:
 - `"concise"`: Short, one-line messages
 - `"descriptive"`: Detailed, multi-line messages with explanations
 
+**`customGuideline`** (string, optional)
+- Custom instructions for the AI to follow when generating commit messages
+- Examples: "Always mention ticket number", "Use imperative mood", "Include breaking changes section"
+
 ### Changing Preferences
 
-Edit `~/.commit-cli.json` manually, or delete it to run the setup again.
+You can change your preferences in two ways:
+
+1. **Using the Settings Menu (Recommended)**: When reviewing a commit message, select "Change settings" to modify:
+   - AI Provider and Model
+   - API Key
+   - Commit message preferences (conventional commits, style, custom guidelines)
+
+2. **Manual Edit**: Edit `~/.commit-cli.json` directly, or delete it to run the setup again.
 
 ## Advanced Usage
 
 ### Environment Variables
 
-You can set the API key via environment variable instead of the config file:
+You can set API keys via environment variables instead of the config file:
 
 ```bash
+# For Anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
+commit
+
+# For Google
+export GOOGLE_API_KEY=AIza...
 commit
 ```
 
@@ -192,8 +243,10 @@ commit
 For automated environments:
 
 ```bash
-# Set API key
-export ANTHROPIC_API_KEY=$YOUR_SECRET_KEY
+# Set API key (choose provider)
+export ANTHROPIC_API_KEY=$YOUR_ANTHROPIC_KEY
+# OR
+export GOOGLE_API_KEY=$YOUR_GOOGLE_KEY
 
 # Stage changes
 git add .
@@ -258,9 +311,9 @@ commit-agent-cli/
 
 ## Troubleshooting
 
-### "ANTHROPIC_API_KEY is not set"
+### "API Key is not set"
 
-**Solution:** Run `commit` again and enter your API key when prompted.
+**Solution:** Run `commit` again and enter your API key when prompted, or use the settings menu to update it.
 
 ### "No staged changes found"
 
@@ -269,6 +322,27 @@ commit-agent-cli/
 git add .
 commit
 ```
+
+### API Key issues
+
+**Invalid Anthropic key:**
+- Verify your key at https://console.anthropic.com
+- Make sure it starts with `sk-ant-`
+- Use settings menu or delete `~/.commit-cli.json` and re-enter
+
+**Invalid Google key:**
+- Verify your key at https://aistudio.google.com/app/apikey
+- Make sure it's a valid API key
+- Use settings menu or delete `~/.commit-cli.json` and re-enter
+
+**Rate limits:**
+- You've hit your provider's API rate limits
+- Wait a few minutes and try again
+- Check your usage at your provider's console
+
+**Authentication errors:**
+- The CLI will detect authentication errors and prompt you to enter a new API key
+- You can also change providers using the settings menu if one provider is having issues
 
 ### "File too large" error
 
@@ -285,9 +359,10 @@ commit
 ### Commit message is not what I expected
 
 **Solutions:**
-1. Click "Regenerate" to try again
-2. Edit the message manually before committing
-3. Adjust your preferences in `~/.commit-cli.json`
+1. Click "Regenerate" to try again with the same provider
+2. Use "Change settings" to switch providers or models
+3. Provide feedback on what to change when regenerating
+4. Adjust your preferences in the settings menu
 
 ### API Key issues
 

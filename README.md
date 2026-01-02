@@ -1,6 +1,6 @@
 # commit-agent-cli
 
-> AI-powered git commit message generator using Claude Sonnet 4.5 and LangGraph
+> AI-powered git commit message generator using Claude Sonnet 4.5 / Opus 4.5 or Google Gemini and LangGraph
 
 Generate intelligent, context-aware commit messages by simply typing `commit`.
 
@@ -20,12 +20,14 @@ commit
 ## First-Time Setup
 
 You'll be prompted to:
-1. Enter your [Anthropic API Key](https://console.anthropic.com)
-2. Choose commit message preferences (conventional commits, verbosity)
+1. Select your AI Provider (Anthropic Claude or Google Gemini)
+2. Choose your preferred model
+3. Enter your API Key ([Anthropic Console](https://console.anthropic.com) or [Google AI Studio](https://aistudio.google.com/app/apikey))
+4. Choose commit message preferences (conventional commits, verbosity)
 
 ## Features
 
-Powered by Claude Sonnet 4.5, this tool autonomously explores your codebase to generate intelligent commit messages with full transparency into its reasoning process. Supports customizable commit styles with secure local configuration storage.
+Powered by Claude Sonnet 4.5 / Opus 4.5 or Google Gemini, this tool autonomously explores your codebase to generate intelligent commit messages with full transparency into its reasoning process. Supports customizable commit styles with secure local configuration storage and the ability to switch between AI providers at any time.
 
 ## Documentation
 
@@ -34,7 +36,7 @@ Powered by Claude Sonnet 4.5, this tool autonomously explores your codebase to g
 ## Requirements
 
 - Node.js 18+
-- Anthropic API key
+- Anthropic API key OR Google AI API key
 
 ## License
 
