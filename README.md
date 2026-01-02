@@ -42,4 +42,4 @@ MIT
 
 ---
 
-**Links:** [GitHub](https://github.com/sunggyeol/commit-agent-cli) • [Issues](https://github.com/sunggyeol/commit-agent-cli/issues) • [Docs](./docs/README.md)
+**Links:** [GitHub](https://github.com/sunggyeol/commit-agent-cli) 
