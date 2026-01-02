@@ -27,20 +27,28 @@ const notifier = updateNotifier({
 });
 
 // Show notification if update is available
-if (notifier.update) {
+if (notifier.update && notifier.update.current !== notifier.update.latest) {
     const currentVersion = notifier.update.current;
     const latestVersion = notifier.update.latest;
     
+    const boxWidth = 67;
+    const padLine = (content: string, width: number): string => {
+        // Strip ANSI codes to calculate actual visible length
+        const visibleLength = content.replace(/\u001b\[[0-9;]*m/g, '').length;
+        const padding = width - visibleLength;
+        return content + ' '.repeat(Math.max(0, padding));
+    };
+    
     console.log('');
     console.log(pc.yellow('╭───────────────────────────────────────────────────────────────────╮'));
-    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '  ' + pc.bold('New version of commit-cli is available!') + '                      ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '  Current: ' + pc.dim(currentVersion) + '  →  Latest: ' + pc.green(pc.bold(latestVersion)) + '                               ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '  ' + pc.dim('Update after you finish by running:') + '                        ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '  ' + pc.cyan(pc.bold(`npm install -g ${packageJson.name}@latest`)) + '            ' + pc.yellow('│'));
-    console.log(pc.yellow('│') + '                                                                   ' + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('  ' + pc.bold('New version of commit-cli is available!'), boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('  Current: ' + pc.dim(currentVersion) + '  →  Latest: ' + pc.green(pc.bold(latestVersion)), boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('  ' + pc.dim('Update after you finish by running:'), boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('  ' + pc.cyan(pc.bold(`npm install -g ${packageJson.name}@latest`)), boxWidth) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
     console.log(pc.yellow('╰───────────────────────────────────────────────────────────────────╯'));
     console.log('');
 }

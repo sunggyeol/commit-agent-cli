@@ -331,7 +331,7 @@ The update notifier only works when:
    │  New version of commit-cli is available!                         │
    │                                                                   │
    │  Current version:  0.1.3                                         │
-   │  Latest version:   0.1.6                                         │
+   │  Latest version:   0.1.7                                         │
    │                                                                   │
    │  You can update it by running:                                   │
    │  npm install -g commit-agent-cli                                 │

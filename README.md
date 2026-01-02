@@ -1,6 +1,6 @@
 # commit-agent-cli
 
-> AI-powered git commit message generator using Claude 4.5 and LangGraph
+> AI-powered git commit message generator using Claude Sonnet 4.5 and LangGraph
 
 Generate intelligent, context-aware commit messages by simply typing `commit`.
 
@@ -25,12 +25,7 @@ You'll be prompted to:
 
 ## Features
 
-- 🤖 AI-powered with Claude 4.5
-- 🕵️ Autonomous codebase exploration
-- 👁️ Transparent agent actions
-- ⚙️ Customizable commit styles
-- 🔒 Secure local storage
-- 🔔 Auto update notifications
+Powered by Claude Sonnet 4.5, this tool autonomously explores your codebase to generate intelligent commit messages with full transparency into its reasoning process. Supports customizable commit styles with secure local configuration storage.
 
 ## Documentation
 
