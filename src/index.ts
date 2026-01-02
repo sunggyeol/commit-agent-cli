@@ -1,13 +1,26 @@
 #!/usr/bin/env node
 import 'dotenv/config';
-import { intro, outro, text, spinner, confirm, isCancel, cancel, note, select } from '@clack/prompts';
-import { getStagedDiffSmart, commit, push, isGitRepository } from './git.js';
+import { intro, outro, text, spinner, confirm, isCancel, cancel, note, select, multiselect } from '@clack/prompts';
+import {
+    getStagedDiffSmart,
+    commit,
+    push,
+    isGitRepository,
+    getStagedFiles,
+    getUnstagedFiles,
+    getUntrackedFiles,
+    getRecentCommits,
+    getStagedStats,
+    stageFiles,
+    getFileStatus
+} from './git.js';
 import { generateCommitMessage } from './agent.js';
 import pc from 'picocolors';
 import updateNotifier from 'update-notifier';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join as joinPath } from 'path';
+import { execa } from 'execa';
 
 import { homedir } from 'os';
 import { join } from 'path';
@@ -239,6 +252,54 @@ async function promptForApiKey(provider: AIProvider): Promise<string> {
 
         return key as string;
     }
+}
+
+async function showGuidedStaging(): Promise<boolean> {
+    const s = spinner();
+    s.start('Checking for unstaged and untracked files...');
+
+    const [unstaged, untracked] = await Promise.all([
+        getUnstagedFiles(),
+        getUntrackedFiles()
+    ]);
+
+    s.stop('Files found.');
+
+    const allFiles = [
+        ...unstaged.map(f => ({ file: f, status: 'modified' as const })),
+        ...untracked.map(f => ({ file: f, status: 'untracked' as const }))
+    ];
+
+    if (allFiles.length === 0) {
+        note('No changes to stage. Make some changes first!', 'No Changes');
+        return false;
+    }
+
+    note(`Found ${allFiles.length} file(s) with changes`, 'Available Files');
+
+    const selectedFiles = await multiselect({
+        message: 'Select files to stage (Space to select, Enter to continue):',
+        options: allFiles.map(({ file, status }) => ({
+            value: file,
+            label: `${file} (${status})`,
+        })),
+        required: false,
+    });
+
+    if (isCancel(selectedFiles)) {
+        return false;
+    }
+
+    if (!selectedFiles || (selectedFiles as string[]).length === 0) {
+        note('No files selected. You can run "git add <files>" manually.', 'Skipped');
+        return false;
+    }
+
+    s.start('Staging selected files...');
+    await stageFiles(selectedFiles as string[]);
+    s.stop(`Staged ${(selectedFiles as string[]).length} file(s).`);
+
+    return true;
 }
 
 async function showSettingsMenu(currentConfig: AppConfig): Promise<AppConfig | null> {
@@ -497,17 +558,149 @@ async function main() {
         note(`Preferences saved! You can change these anytime in the settings menu.`, 'Setup Complete');
     }
 
-    // 3. Get Diff
+    // 3. Check for staged changes & offer guided staging if needed
     const s = spinner();
-    s.start('Analyzing staged changes...');
-    const diff = await getStagedDiffSmart();
+    s.start('Checking staged changes...');
+    let diff = await getStagedDiffSmart();
 
     if (!diff) {
         s.stop('No staged changes found.');
-        cancel('Please stage your changes using "git add" first.');
-        process.exit(0);
+
+        const shouldStage = await select({
+            message: 'No staged changes. Would you like to stage files now?',
+            options: [
+                { value: true, label: 'Yes, show me files to stage' },
+                { value: false, label: 'No, I\'ll stage manually' }
+            ],
+            initialValue: true,
+        });
+
+        if (isCancel(shouldStage) || !shouldStage) {
+            cancel('Please stage your changes using "git add" first.');
+            process.exit(0);
+        }
+
+        const staged = await showGuidedStaging();
+        if (!staged) {
+            cancel('No files were staged. Exiting.');
+            process.exit(0);
+        }
+
+        // Re-check staged changes
+        s.start('Analyzing staged changes...');
+        diff = await getStagedDiffSmart();
+        if (!diff) {
+            s.stop('Still no staged changes.');
+            cancel('Something went wrong. Please try again.');
+            process.exit(0);
+        }
     }
     s.stop('Changes detected.');
+
+    // 4. Show preview of changes
+    const stats = await getStagedStats();
+    const stagedFiles = await getStagedFiles();
+
+    let previewMessage = pc.cyan(`${stats.files} file(s) changed`);
+    if (stats.insertions > 0) previewMessage += pc.green(`, ${stats.insertions} insertion(s)`);
+    if (stats.deletions > 0) previewMessage += pc.red(`, ${stats.deletions} deletion(s)`);
+    previewMessage += '\n' + stagedFiles.map(f => `  • ${f}`).join('\n');
+
+    note(previewMessage, 'Changes Summary');
+
+    // 5. Show recent commits for context
+    const recentCommits = await getRecentCommits(5);
+    if (recentCommits.length > 0) {
+        const commitsMessage = recentCommits
+            .map(c => `  ${pc.dim(c.hash)} ${c.message}`)
+            .join('\n');
+        note(commitsMessage, 'Recent Commits');
+    }
+
+    // 6. Check for unstaged changes and warn
+    const [unstaged, untracked] = await Promise.all([
+        getUnstagedFiles(),
+        getUntrackedFiles()
+    ]);
+
+    if (unstaged.length > 0 || untracked.length > 0) {
+        const unstagedCount = unstaged.length + untracked.length;
+        const warningMessage = `You have ${unstagedCount} unstaged file(s):\n` +
+            [...unstaged.map(f => `  • ${f} (modified)`), ...untracked.map(f => `  • ${f} (untracked)`)].join('\n');
+
+        note(pc.yellow(warningMessage), pc.yellow('⚠ Unstaged Changes'));
+
+        const includeUnstaged = await select({
+            message: 'Include these files in this commit?',
+            options: [
+                { value: false, label: 'No, continue with current staging' },
+                { value: true, label: 'Yes, let me select which ones' }
+            ],
+            initialValue: false,
+        });
+
+        if (!isCancel(includeUnstaged) && includeUnstaged) {
+            const additionalFiles = await multiselect({
+                message: 'Select additional files to stage:',
+                options: [
+                    ...unstaged.map(f => ({ value: f, label: `${f} (modified)` })),
+                    ...untracked.map(f => ({ value: f, label: `${f} (untracked)` }))
+                ],
+                required: false,
+            });
+
+            if (!isCancel(additionalFiles) && additionalFiles && (additionalFiles as string[]).length > 0) {
+                s.start('Staging additional files...');
+                await stageFiles(additionalFiles as string[]);
+
+                // Refresh diff with newly staged files
+                diff = await getStagedDiffSmart();
+                s.stop('Additional files staged.');
+            }
+        }
+    }
+
+    // 7. Detect large changesets and suggest splitting
+    const totalChanges = stats.insertions + stats.deletions;
+    if (stats.files >= 10 || totalChanges >= 500) {
+        const largeChangesetMessage = pc.yellow(
+            `⚠ Large changeset detected (${stats.files} files, ${totalChanges} changes)\n` +
+            `Consider splitting into smaller, focused commits for better review.`
+        );
+        note(largeChangesetMessage, pc.yellow('Large Changeset Warning'));
+
+        const proceedWithLarge = await select({
+            message: 'How would you like to proceed?',
+            options: [
+                { value: 'continue', label: 'Continue with all changes' },
+                { value: 'reselect', label: 'Let me re-select files to commit' },
+                { value: 'cancel', label: 'Cancel and stage manually' }
+            ],
+            initialValue: 'continue',
+        });
+
+        if (isCancel(proceedWithLarge) || proceedWithLarge === 'cancel') {
+            cancel('Cancelled. Use "git add" to stage specific files.');
+            process.exit(0);
+        }
+
+        if (proceedWithLarge === 'reselect') {
+            // Unstage all, then let user re-select
+            await execa('git', ['reset', 'HEAD']);
+            const restaged = await showGuidedStaging();
+            if (!restaged) {
+                cancel('No files were staged. Exiting.');
+                process.exit(0);
+            }
+
+            // Refresh diff
+            diff = await getStagedDiffSmart();
+            if (!diff) {
+                cancel('No staged changes. Exiting.');
+                process.exit(0);
+            }
+        }
+    }
 
     // 4. Generate Message Loop
     let commitMessage = '';
@@ -612,13 +805,18 @@ async function main() {
         const formattedMessage = wrappedLines.map(line => pc.cyan(line)).join('\n');
         note(formattedMessage, pc.bold('Proposed Commit Message'));
 
+        // Only show edit option for single-line messages
+        const isMultiLine = commitMessage.includes('\n');
+        const actionOptions = [
+            { value: 'commit', label: 'Yes, commit' },
+            ...(isMultiLine ? [] : [{ value: 'edit', label: 'Edit message' }]),
+            { value: 'regenerate', label: 'Regenerate' },
+            { value: 'settings', label: 'Change settings' }
+        ];
+
         const action = await select({
             message: 'Do you want to use this message?',
-            options: [
-                { value: 'commit', label: 'Yes, commit' },
-                { value: 'regenerate', label: 'No, regenerate' },
-                { value: 'settings', label: 'Change settings' }
-            ],
+            options: actionOptions,
         });
 
         if (isCancel(action)) {
@@ -628,6 +826,44 @@ async function main() {
 
         if (action === 'commit') {
             confirmed = true;
+        } else if (action === 'edit') {
+            // Allow user to edit the commit message directly
+            const editedMessage = await text({
+                message: 'Edit your commit message:',
+                initialValue: commitMessage,
+                validate: (value) => {
+                    if (!value || value.trim() === '') return 'Commit message cannot be empty';
+                }
+            });
+
+            if (isCancel(editedMessage)) {
+                // User cancelled editing, go back to reviewing the original message
+                continue;
+            }
+
+            commitMessage = editedMessage as string;
+
+            // Show the edited message and confirm
+            const editedFormattedMessage = (editedMessage as string).split('\n').map(line => pc.cyan(line)).join('\n');
+            note(editedFormattedMessage, pc.bold('Edited Commit Message'));
+
+            const confirmEdited = await select({
+                message: 'Use this edited message?',
+                options: [
+                    { value: true, label: 'Yes, commit' },
+                    { value: false, label: 'No, go back' }
+                ],
+                initialValue: true,
+            });
+
+            if (isCancel(confirmEdited)) {
+                continue;
+            }
+
+            if (confirmEdited) {
+                confirmed = true;
+            }
+            // If not confirmed, loop continues to show original message again
         } else if (action === 'settings') {
             // Show settings menu
             const settingsResult = await showSettingsMenu(config);

@@ -103,3 +103,78 @@ export async function isGitRepository(): Promise<boolean> {
     }
 }
 
+export async function getStagedFiles(): Promise<string[]> {
+    const { stdout } = await execa('git', ['diff', '--cached', '--name-only'], {
+        reject: false,
+    });
+    return stdout ? stdout.split('\n').filter(Boolean) : [];
+}
+
+export async function getUnstagedFiles(): Promise<string[]> {
+    const { stdout } = await execa('git', ['diff', '--name-only'], {
+        reject: false,
+    });
+    return stdout ? stdout.split('\n').filter(Boolean) : [];
+}
+
+export async function getUntrackedFiles(): Promise<string[]> {
+    const { stdout } = await execa('git', ['ls-files', '--others', '--exclude-standard'], {
+        reject: false,
+    });
+    return stdout ? stdout.split('\n').filter(Boolean) : [];
+}
+
+export async function getRecentCommits(count: number = 5): Promise<Array<{ hash: string; message: string }>> {
+    const { stdout } = await execa('git', ['log', `-${count}`, '--pretty=format:%h|%s'], {
+        reject: false,
+    });
+
+    if (!stdout) return [];
+
+    return stdout.split('\n').map(line => {
+        const [hash, ...messageParts] = line.split('|');
+        return { hash, message: messageParts.join('|') };
+    });
+}
+
+export async function getStagedStats(): Promise<{ files: number; insertions: number; deletions: number }> {
+    const { stdout: stats } = await execa('git', ['diff', '--cached', '--stat'], {
+        reject: false,
+    });
+
+    if (!stats) return { files: 0, insertions: 0, deletions: 0 };
+
+    // Parse stats like "3 files changed, 45 insertions(+), 12 deletions(-)"
+    const match = stats.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+
+    return {
+        files: match ? parseInt(match[1]) : 0,
+        insertions: match && match[2] ? parseInt(match[2]) : 0,
+        deletions: match && match[3] ? parseInt(match[3]) : 0,
+    };
+}
+
+export async function stageFiles(files: string[]): Promise<void> {
+    if (files.length === 0) return;
+    await execa('git', ['add', ...files]);
+}
+
+export async function getFileStatus(file: string): Promise<'modified' | 'added' | 'deleted' | 'untracked'> {
+    // Check if untracked first
+    const { stdout: untrackedCheck } = await execa('git', ['ls-files', '--others', '--exclude-standard', file], {
+        reject: false,
+    });
+    if (untrackedCheck) return 'untracked';
+
+    // Check diff status
+    const { stdout: status } = await execa('git', ['diff', '--name-status', file], {
+        reject: false,
+    });
+
+    if (status.startsWith('M')) return 'modified';
+    if (status.startsWith('A')) return 'added';
+    if (status.startsWith('D')) return 'deleted';
+
+    return 'modified'; // fallback
+}
+

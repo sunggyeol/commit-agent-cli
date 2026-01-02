@@ -1,7 +1,5 @@
 # commit-agent-cli
 
-> AI-powered git commit message generator using Claude Sonnet 4.5 / Opus 4.5 or Google Gemini and LangGraph
-
 Generate intelligent, context-aware commit messages by simply typing `commit`.
 
 ## Quick Start
@@ -27,7 +25,7 @@ You'll be prompted to:
 
 ## Features
 
-Powered by Claude Sonnet 4.5 / Opus 4.5 or Google Gemini, this tool autonomously explores your codebase to generate intelligent commit messages with full transparency into its reasoning process. Supports customizable commit styles with secure local configuration storage and the ability to switch between AI providers at any time.
+Powered by Claude and Gemini, this tool intelligently explores your codebase to generate clear, context-aware commit messages with full transparency. Enjoy customizable commit styles, secure local configuration, and seamless switching between AI providers.
 
 ## Documentation
 
