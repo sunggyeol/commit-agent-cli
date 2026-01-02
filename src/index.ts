@@ -20,10 +20,10 @@ const packageJson = JSON.parse(
     readFileSync(joinPath(__dirname, '../package.json'), 'utf-8')
 );
 
-// Check for updates
+// Check for updates - always check on every run (no caching)
 const notifier = updateNotifier({
     pkg: packageJson,
-    updateCheckInterval: 1000 * 60 * 60, // Check once per hour (was 24h)
+    updateCheckInterval: 0, // Always check for updates (no cache)
 });
 
 // Show notification if update is available
@@ -31,30 +31,34 @@ if (notifier.update && notifier.update.current !== notifier.update.latest) {
     const currentVersion = notifier.update.current;
     const latestVersion = notifier.update.latest;
     
-    const boxWidth = 67;
-    const padLine = (content: string, width: number): string => {
-        // Strip ANSI codes to calculate actual visible length
-        const visibleLength = content.replace(/\u001b\[[0-9;]*m/g, '').length;
-        const padding = width - visibleLength;
-        return content + ' '.repeat(Math.max(0, padding));
+    // Build message lines without colors first to calculate padding
+    const line1Text = `${packageJson.name} update available! ${currentVersion} → ${latestVersion}`;
+    const line2Text = `Run npm install -g ${packageJson.name}@latest to update.`;
+    
+    // Find the longest line to determine box width
+    const maxLength = Math.max(line1Text.length, line2Text.length);
+    const boxWidth = maxLength + 2; // Add 2 for left/right padding
+    
+    // Helper to pad a line with spaces
+    const padLine = (text: string, visibleLength: number): string => {
+        const padding = boxWidth - visibleLength;
+        return text + ' '.repeat(Math.max(0, padding));
     };
     
+    // Build colored lines with proper padding
+    const line1Colored = ` ${packageJson.name} update available! ${pc.cyan(currentVersion)} → ${pc.green(pc.bold(latestVersion))}`;
+    const line2Colored = ` Run ${pc.cyan(pc.bold(`npm install -g ${packageJson.name}@latest`))} to update.`;
+    
+    // Create border
+    const horizontalBorder = '─'.repeat(boxWidth);
+    
     console.log('');
-    console.log(pc.yellow('╭───────────────────────────────────────────────────────────────────╮'));
-    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('  ' + pc.bold('New version of commit-cli is available!'), boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('  Current: ' + pc.dim(currentVersion) + '  →  Latest: ' + pc.green(pc.bold(latestVersion)), boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('  ' + pc.dim('Update after you finish by running:'), boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('  ' + pc.cyan(pc.bold(`npm install -g ${packageJson.name}@latest`)), boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('│') + padLine('', boxWidth) + pc.yellow('│'));
-    console.log(pc.yellow('╰───────────────────────────────────────────────────────────────────╯'));
+    console.log(pc.yellow('╭' + horizontalBorder + '╮'));
+    console.log(pc.yellow('│') + padLine(line1Colored, line1Text.length + 1) + pc.yellow('│'));
+    console.log(pc.yellow('│') + padLine(line2Colored, line2Text.length + 1) + pc.yellow('│'));
+    console.log(pc.yellow('╰' + horizontalBorder + '╯'));
     console.log('');
 }
-
-// Trigger the notification (non-blocking background check)
-notifier.notify({ defer: false, isGlobal: true });
 
 const CONFIG_PATH = join(homedir(), '.commit-cli.json');
 
